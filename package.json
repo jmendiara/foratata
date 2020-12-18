@@ -1,7 +1,7 @@
 {
-  "name": "node-typescript-boilerplate",
-  "version": "0.0.0",
-  "description": "Minimalistic boilerplate to quick-start Node.js development in TypeScript.",
+  "name": "foratata",
+  "version": "1.0.0",
+  "description": "Concurrent TaskQueue with lifecycle notification",
   "author": "Javier Mendiara Cañardo <jmendiara@gmail.com>",
   "license": "Apache-2.0",
   "scripts": {
@@ -22,12 +22,9 @@
     "lib",
     "src"
   ],
-  "bin": {
-    "boilerplate": "./bin/boilerplate"
-  },
   "devDependencies": {
     "@types/jest": "^26.0.19",
-    "@types/node": "^14.14.2",
+    "@types/node": "^14.14.14",
     "@typescript-eslint/eslint-plugin": "^4.9.1",
     "@typescript-eslint/parser": "^4.9.1",
     "eslint": "^7.15.0",
