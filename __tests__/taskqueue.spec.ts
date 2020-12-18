@@ -122,15 +122,15 @@ describe('TaskQueue', () => {
     const t3 = jest.fn().mockResolvedValue('mola2');
 
     queue.push(t1, t2, t3);
-    let messages: Error;
+    let messages: string[] = [];
 
     try {
       await queue.run();
     } catch (err) {
       messages = err.message.split('\n');
     }
-    expect(messages[0].trim()).toEqual('TaskQueue ended with 1 errors:');
-    expect(messages[1].trim()).toContain('bum');
+    expect(messages[0]?.trim()).toEqual('TaskQueue ended with 1 errors:');
+    expect(messages[1]?.trim()).toContain('bum');
   });
 
   it('should not run run all async tasks', async () => {
