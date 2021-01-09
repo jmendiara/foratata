@@ -195,7 +195,7 @@ export interface Task {
 /**
  * Emmited when a task has ended, successfully or not
  */
-interface TaskEvent {
+export interface TaskEvent {
   /** the task executed */
   task: Task;
   /** time (in ms) the task took to complete */
@@ -205,7 +205,7 @@ interface TaskEvent {
 /**
  * Emmited when a task starts, successfully or not
  */
-interface TaskStartEvent {
+export interface TaskStartEvent {
   /** the task executed */
   task: Task;
 }
@@ -213,7 +213,7 @@ interface TaskStartEvent {
 /**
  * Emmited when a task erroes
  */
-interface TaskErrorEvent {
+export interface TaskErrorEvent {
   /** the task executed */
   task: Task;
   /** time (in ms) the task took to complete */
@@ -225,7 +225,7 @@ interface TaskErrorEvent {
 /**
  * Emmited when the queue completes
  */
-interface QueueCompleteEvent {
+export interface QueueCompleteEvent {
   /** errors raised during the execution */
   errors?: Error[];
   /** time (in ms) the queue took to complete */
@@ -235,7 +235,7 @@ interface QueueCompleteEvent {
 /**
  * Emmited when the queue starts
  */
-interface QueueStartEvent {
+export interface QueueStartEvent {
   /** The concurrency used for running the queue */
   concurrency: number;
   /** number of tasks in the queue */
