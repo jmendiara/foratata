@@ -30,11 +30,39 @@ try {
   const res = await queue.run(2);
 } catch (err) {
   console.error(err); // error abstract with all errors
-
 }
-
 ```
 
+### Advanced
+```js
+import { TaskQueue } from 'foratata';
+
+// Give the queue a name and specify the concurrency
+const queue = new TaskQueue('MyQueue', 2);
+
+// Create tasks with a title for better traceability
+const task = () => delay(1000);
+task.title = 'A task';
+
+queue.push(task);
+
+// Lifecycle events
+queue.on('taskStart',   ({ task }) =>               console.log(`START    ${task.title}`));
+queue.on('taskSuccess', ({ task, time, result }) => console.log(`SUCCESS  ${task.title} took ${time}ms and the result was`, result));
+queue.on('taskError',   ({ task, time, error  }) => console.log(`ERROR    ${task.title} took ${time}ms and the error  was`, error));
+queue.on('taskComplete',({ task, time }) =>         console.log(`COMPLETE ${task.title} took ${time}ms`));
+
+queue.on('start',    ({ concurrency, size })     => console.log(`QUEUE START with ${size} items and ${concurrency} tasks in parallel`));
+queue.on('complete', ({ time, results, errors }) => console.log(`QUEUE ENDED in ${time}ms`, errors, results));
+
+// Anidate queues
+const otherQueue = new TaskQueue();
+queue.push(otherQueue.toTask());
+
+await queue.run(); // uses the constructor concurrency. Or all in parallel if none was specified
+```
+
+### Notifications
 All queue lifecycle is emmited as events, and you can subscribe to them to have some feedback on how is going.
 We ship an event subscriber that outputs to console.
 
