@@ -11,6 +11,7 @@ export class TaskQueue extends EventEmitter {
   protected queue: Task[] = [];
   protected pending: Task[] = [];
   private errors: Error[] = [];
+  private results: unknown[] = [];
   private running = 0;
   private runStart = 0;
 
@@ -21,10 +22,10 @@ export class TaskQueue extends EventEmitter {
   private complete() {
     const event: QueueCompleteEvent = {
       time: Date.now() - this.runStart,
+      results: this.results,
+      errors: this.errors.length !== 0 ? this.errors : undefined,
     };
-    if (this.errors.length !== 0) {
-      event.errors = this.errors;
-    }
+
     this.runStart = 0;
     this.emit('complete', event);
     this.removeAllListeners();
@@ -36,8 +37,9 @@ export class TaskQueue extends EventEmitter {
     const start = Date.now();
     try {
       this.emit('taskStart', { task });
-      await task();
-      this.emit('taskSuccess', { task, time: Date.now() - start });
+      const result = await task();
+      this.emit('taskSuccess', { task, time: Date.now() - start, result });
+      this.results.push(result);
     } catch (error) {
       // store and forget
       this.emit('taskError', { error, task, time: Date.now() - start });
@@ -98,7 +100,7 @@ export class TaskQueue extends EventEmitter {
    *
    * @param concurrency the concurrency to execute task. Not providing this parameter will run all the tasks in parallel
    */
-  public async run(concurrency?: number): Promise<void> {
+  public async run(concurrency?: number): Promise<unknown[]> {
     concurrency = concurrency ?? this.concurrency ?? this.queue.length;
     if ((concurrency as number) <= 0 && this.queue.length !== 0) {
       throw new Error('Invalid concurrency');
@@ -115,7 +117,7 @@ export class TaskQueue extends EventEmitter {
           ];
           reject(new Error(msgs.join('\n  ')));
         } else {
-          resolve();
+          resolve(this.results);
         }
       });
 
@@ -142,7 +144,7 @@ export const ConsoleSubscriber = (queue: TaskQueue, verbose = false): (() => voi
   const title = (task: Task) => `${queue.title}: ${task.title ?? task.name ?? 'task'}`;
   const onTaskStart = ({ task }: TaskStartEvent) => console.debug(`[ BEGIN  ] ${title(task)}`);
   const onTaskCompleted = ({ task, time }: TaskEvent) => console.debug(`[${timestring(time)}] END ${title(task)}`);
-  const onTaskSuccess = ({ task, time }: TaskEvent) => console.debug(`[${timestring(time)}] OK ${title(task)}`);
+  const onTaskSuccess = ({ task, time }: TaskSuccessEvent) => console.debug(`[${timestring(time)}] OK ${title(task)}`);
   const onTaskError = ({ task, time }: TaskErrorEvent) => console.error(`[${timestring(time)}] KO ${title(task)}`);
   const onStart = ({ concurrency, size }: QueueStartEvent) =>
     console.info(`[ START  ] ${queue.title} with ${size} task (${concurrency} in parallel)`);
@@ -175,7 +177,7 @@ export const ConsoleSubscriber = (queue: TaskQueue, verbose = false): (() => voi
 
 export interface TaskQueue {
   on(event: 'taskStart', listener: (ev: TaskStartEvent) => void): this;
-  on(event: 'taskSuccess', listener: (ev: TaskEvent) => void): this;
+  on(event: 'taskSuccess', listener: (ev: TaskSuccessEvent) => void): this;
   on(event: 'taskError', listener: (ev: TaskErrorEvent) => void): this;
   on(event: 'taskCompleted', listener: (ev: TaskEvent) => void): this;
   on(event: 'start', listener: (ev: QueueStartEvent) => void): this;
@@ -211,13 +213,17 @@ export interface TaskStartEvent {
 }
 
 /**
+ * Emmited when a task succeeds
+ */
+export interface TaskSuccessEvent extends TaskEvent {
+  /** the error thrown */
+  result: unknown;
+}
+
+/**
  * Emmited when a task erroes
  */
-export interface TaskErrorEvent {
-  /** the task executed */
-  task: Task;
-  /** time (in ms) the task took to complete */
-  time: number;
+export interface TaskErrorEvent extends TaskEvent {
   /** the error thrown */
   error: unknown;
 }
@@ -226,6 +232,8 @@ export interface TaskErrorEvent {
  * Emmited when the queue completes
  */
 export interface QueueCompleteEvent {
+  /** results for the succesfull tasks */
+  results: unknown[];
   /** errors raised during the execution */
   errors?: Error[];
   /** time (in ms) the queue took to complete */

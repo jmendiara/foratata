@@ -1,14 +1,14 @@
 import { Task, TaskQueue, ConsoleSubscriber } from '../src';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (title: string, ms: number) => new Promise((resolve) => setTimeout(() => resolve(title), ms));
 const createAsyncTask = (title: string, ms: number): Task => {
-  const task: Task = () => delay(ms);
+  const task: Task = () => delay(title, ms);
   task.title = title;
   return task;
 };
 
 const createSyncTask = (title: string): Task => {
-  const task: Task = () => void 0;
+  const task: Task = () => title;
   task.title = title;
   return task;
 };
@@ -43,7 +43,7 @@ describe('TaskQueue', () => {
   it('should run empty queue', async () => {
     const queue = new TaskQueue();
 
-    await expect(queue.run()).resolves.toEqual(void 0);
+    await expect(queue.run()).resolves.toEqual([]);
   });
 
   it('should reject with invalid concurrency', async () => {
@@ -77,8 +77,9 @@ describe('TaskQueue', () => {
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
 
     queue.push(t1, t2, t3);
-    await queue.run();
+    const res = await queue.run();
 
+    expect(res).toEqual(['t1', 't3', 't2']);
     expect(events).toEqual(['start-t1', 'start-t2', 'start-t3', 'complete-t1', 'complete-t3', 'complete-t2']);
   });
 
@@ -93,8 +94,9 @@ describe('TaskQueue', () => {
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
 
     queue.push(t1, t2, t3);
-    await queue.run(2);
+    const res = await queue.run(2);
 
+    expect(res).toEqual(['t1', 't3', 't2']);
     expect(events).toEqual(['start-t1', 'start-t2', 'complete-t1', 'start-t3', 'complete-t3', 'complete-t2']);
   });
 
@@ -109,44 +111,51 @@ describe('TaskQueue', () => {
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
 
     queue.push(t1, t2, t3);
-    await queue.run(2);
+    const res = await queue.run(2);
 
+    expect(res).toEqual(['t2', 't1', 't3']);
     expect(events).toEqual(['start-t1', 'start-t2', 'complete-t2', 'start-t3', 'complete-t1', 'complete-t3']);
   });
 
   it('should manage errors silently', async () => {
     const queue = new TaskQueue();
 
-    const t1 = jest.fn().mockResolvedValue('mola');
+    const t1 = jest.fn().mockResolvedValue('t1');
     const t2 = jest.fn().mockRejectedValue(new Error('bum'));
-    const t3 = jest.fn().mockResolvedValue('mola2');
+    const t3 = jest.fn().mockResolvedValue('t3');
 
     queue.push(t1, t2, t3);
     let messages: string[] = [];
-
     try {
       await queue.run();
     } catch (err) {
       messages = err.message.split('\n');
     }
+
     expect(messages[0]?.trim()).toEqual('TaskQueue ended with 1 errors:');
     expect(messages[1]?.trim()).toContain('bum');
   });
 
-  it('should not run run all async tasks', async () => {
-    const queue = new TaskQueue();
-    const t1 = createAsyncTask('t1', 10);
-    const t2 = createAsyncTask('t2', 50);
-    const t3 = createAsyncTask('t3', 20);
+  it('should receive results/erros on complete', async () => {
+    expect.assertions(3);
 
-    const events: string[] = [];
-    queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
-    queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+    const queue = new TaskQueue();
+    const t1 = jest.fn().mockResolvedValue('t1');
+    const t2 = jest.fn().mockRejectedValue(new Error('bum'));
+    const t3 = jest.fn().mockResolvedValue('t3');
+
+    queue.once('complete', ({ errors, results }) => {
+      expect(errors).toHaveLength(1);
+      expect(errors[0].message).toMatch('bum');
+      expect(results).toEqual(['t1', 't3']);
+    });
 
     queue.push(t1, t2, t3);
-    await queue.run();
-
-    expect(events).toEqual(['start-t1', 'start-t2', 'start-t3', 'complete-t1', 'complete-t3', 'complete-t2']);
+    try {
+      await queue.run(2);
+    } catch (err) {
+      void 0;
+    }
   });
 
   it('should subscribe to events and print to console', async () => {

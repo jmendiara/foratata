@@ -24,10 +24,15 @@ queue.push(
   () => whatever(), // something sync
 );
 
-// Run the queue with concurrency.
- // 2 simultaneous tasks as a time
-queue.run(2) // promise here!
-  .catch((err) => console.error(err)) // error abstract with all errors
+try {
+  // Run the queue with concurrency.
+  // 2 simultaneous tasks as a time
+  const res = await queue.run(2);
+} catch (err) {
+  console.error(err); // error abstract with all errors
+
+}
+
 ```
 
 All queue lifecycle is emmited as events, and you can subscribe to them to have some feedback on how is going.
