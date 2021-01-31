@@ -115,7 +115,7 @@ export class TaskQueue extends EventEmitter {
             `${this.title} ended with ${errors.length} errors:`,
             ...errors.map((err: Error) => err.message),
           ];
-          reject(new Error(msgs.join('\n  ')));
+          reject(new QueueError(msgs.join('\n  '), errors));
         } else {
           resolve(this.results);
         }
@@ -248,4 +248,14 @@ export interface QueueStartEvent {
   concurrency: number;
   /** number of tasks in the queue */
   size: number;
+}
+
+/**
+ * Run Queue with all the errors and the abstract message for all of them
+ */
+export class QueueError extends Error {
+  constructor(message: string, public errors: Error[]) {
+    super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }

@@ -1,4 +1,4 @@
-import { Task, TaskQueue, ConsoleSubscriber } from '../src';
+import { Task, TaskQueue, ConsoleSubscriber, QueueError } from '../src';
 
 const delay = (title: string, ms: number) => new Promise((resolve) => setTimeout(() => resolve(title), ms));
 const createAsyncTask = (title: string, ms: number): Task => {
@@ -126,14 +126,19 @@ describe('TaskQueue', () => {
 
     queue.push(t1, t2, t3);
     let messages: string[] = [];
+    let error = null;
+
     try {
       await queue.run();
     } catch (err) {
       messages = err.message.split('\n');
+      error = err;
     }
-
     expect(messages[0]?.trim()).toEqual('TaskQueue ended with 1 errors:');
     expect(messages[1]?.trim()).toContain('bum');
+    expect(error).toBeInstanceOf(QueueError);
+    expect(error.errors).toHaveLength(1);
+    expect(error.errors[0].message).toMatch('bum');
   });
 
   it('should receive results/erros on complete', async () => {
