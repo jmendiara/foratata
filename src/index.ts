@@ -6,12 +6,12 @@ import { EventEmitter } from 'events';
  * notifies about the queue lifecycle with the events: `start`, `complete`,
  * and the tasks lifecycle with `taskStart`, `taskSuccess`, `taskError`, `taskEnd`
  */
-export class TaskQueue extends EventEmitter {
+export class TaskQueue<RESULT = unknown> extends EventEmitter {
   /** the queue */
-  protected queue: Task[] = [];
-  protected pending: Task[] = [];
+  protected queue: Task<RESULT>[] = [];
+  protected pending: Task<RESULT>[] = [];
   private errors: Error[] = [];
-  private results: unknown[] = [];
+  private results: RESULT[] = [];
   private running = 0;
   private runStart = 0;
 
@@ -32,7 +32,7 @@ export class TaskQueue extends EventEmitter {
   }
 
   /** consumes the queue runnin tasks */
-  private async runTask(task: Task) {
+  private async runTask(task: Task<RESULT>) {
     this.running++;
     const start = Date.now();
     try {
@@ -65,7 +65,7 @@ export class TaskQueue extends EventEmitter {
    * @param task The task to run
    * @returns the new length of the queue.
    */
-  public push(...task: Task[]): number {
+  public push(...task: Task<RESULT>[]): number {
     return this.queue.push(...task);
   }
 
@@ -84,8 +84,8 @@ export class TaskQueue extends EventEmitter {
    * ```
    * @param concurrency
    */
-  public toTask(concurrency?: number): Task {
-    const task: Task = () => this.run(concurrency);
+  public toTask(concurrency?: number): Task<RESULT[]> {
+    const task: Task<RESULT[]> = () => this.run(concurrency);
     task.title = this.title;
     return task;
   }
@@ -100,7 +100,7 @@ export class TaskQueue extends EventEmitter {
    *
    * @param concurrency the concurrency to execute task. Not providing this parameter will run all the tasks in parallel
    */
-  public async run(concurrency?: number): Promise<unknown[]> {
+  public async run(concurrency?: number): Promise<RESULT[]> {
     concurrency = concurrency ?? this.concurrency ?? this.queue.length;
     if ((concurrency as number) <= 0 && this.queue.length !== 0) {
       throw new Error('Invalid concurrency');
@@ -187,9 +187,9 @@ export interface TaskQueue {
 /**
  * Asyncronous execution task
  */
-export interface Task {
+export interface Task<RESULT = unknown> {
   /** async function executing a task */
-  (): Promise<unknown> | unknown;
+  (): Promise<RESULT> | RESULT;
   /** optional title for the task. Good to set for better trazability */
   title?: string;
 }
@@ -197,9 +197,9 @@ export interface Task {
 /**
  * Emmited when a task has ended, successfully or not
  */
-export interface TaskEvent {
+export interface TaskEvent<RESULT = unknown> {
   /** the task executed */
-  task: Task;
+  task: Task<RESULT>;
   /** time (in ms) the task took to complete */
   time: number;
 }
@@ -207,17 +207,17 @@ export interface TaskEvent {
 /**
  * Emmited when a task starts, successfully or not
  */
-export interface TaskStartEvent {
+export interface TaskStartEvent<RESULT = unknown> {
   /** the task executed */
-  task: Task;
+  task: Task<RESULT>;
 }
 
 /**
  * Emmited when a task succeeds
  */
-export interface TaskSuccessEvent extends TaskEvent {
+export interface TaskSuccessEvent<RESULT = unknown> extends TaskEvent {
   /** the error thrown */
-  result: unknown;
+  result: RESULT;
 }
 
 /**
@@ -225,15 +225,15 @@ export interface TaskSuccessEvent extends TaskEvent {
  */
 export interface TaskErrorEvent extends TaskEvent {
   /** the error thrown */
-  error: unknown;
+  error: Error;
 }
 
 /**
  * Emmited when the queue completes
  */
-export interface QueueCompleteEvent {
+export interface QueueCompleteEvent<RESULT = unknown> {
   /** results for the succesfull tasks */
-  results: unknown[];
+  results: RESULT[];
   /** errors raised during the execution */
   errors?: Error[];
   /** time (in ms) the queue took to complete */

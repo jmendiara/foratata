@@ -1,8 +1,8 @@
 import { Task, TaskQueue, ConsoleSubscriber, QueueError } from '../src';
 
-const delay = (title: string, ms: number) => new Promise((resolve) => setTimeout(() => resolve(title), ms));
-const createAsyncTask = (title: string, ms: number): Task => {
-  const task: Task = () => delay(title, ms);
+const delay = (title: string, ms: number) => new Promise<string>((resolve) => setTimeout(() => resolve(title), ms));
+const createAsyncTask = (title: string, ms: number): Task<string> => {
+  const task: Task<string> = () => delay(title, ms);
   task.title = title;
   return task;
 };
@@ -67,7 +67,7 @@ describe('TaskQueue', () => {
   });
 
   it('should run all async tasks', async () => {
-    const queue = new TaskQueue();
+    const queue = new TaskQueue<string>();
     const t1 = createAsyncTask('t1', 10);
     const t2 = createAsyncTask('t2', 50);
     const t3 = createAsyncTask('t3', 20);
