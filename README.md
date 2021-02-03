@@ -2,6 +2,7 @@
 # foratata
 
 Concurrent TaskQueue with lifecycle notification in typescript (alike a Promise.map with concurrency and continue on failure)
+and cancellation support
 
 NodeJS only (if somebody interested on browser, please open issue)
 
@@ -27,7 +28,7 @@ queue.push(
 try {
   // Run the queue with concurrency.
   // 2 simultaneous tasks as a time
-  const res = await queue.run(2);
+  const res = await queue.run({ concurrency: 2 });
 } catch (err) {
   console.error(err); // error abstract with all errors
 }
@@ -37,11 +38,13 @@ try {
 ```js
 import { TaskQueue } from 'foratata';
 
-// Give the queue a name and specify the concurrency
-const queue = new TaskQueue('MyQueue', 2);
+// Give the queue a name and specify the concurrency and timeout
+const queue = new TaskQueue('MyQueue', { concurrency: 2, timeout: 50 });
 
-// Create tasks with a title for better traceability
-const task = () => delay(1000);
+// take optionally an https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal
+// meaning the Queue has reached its timeout
+const task = ({ signal }) => delay(1000, { signal });
+// Add a title for better traceability
 task.title = 'A task';
 
 queue.push(task);
