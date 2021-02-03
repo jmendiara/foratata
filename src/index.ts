@@ -215,11 +215,19 @@ export interface QueueOptions {
 }
 
 /**
+ * Options for running a task
+ */
+export interface TaskOptions {
+  /** AbortSignal signaling the Queue execution is cancelled. See https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal */
+  signal: AbortSignal;
+}
+
+/**
  * Asyncronous execution task
  */
 export interface Task<RESULT = unknown> {
-  /** async function executing a task */
-  (opts?: { signal: AbortSignal }): Promise<RESULT> | RESULT;
+  /** async / sync function executing a task */
+  (opts: TaskOptions): Promise<RESULT> | RESULT;
   /** optional title for the task. Good to set for better trazability */
   title?: string;
 }
