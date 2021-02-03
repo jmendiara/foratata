@@ -1,8 +1,24 @@
 import { Task, TaskQueue, ConsoleSubscriber, QueueError } from '../src';
 
-const delay = (title: string, ms: number) => new Promise<string>((resolve) => setTimeout(() => resolve(title), ms));
+const delay = (title: string, ms: number, signal?: AbortSignal) => {
+  if (signal?.aborted) {
+    return Promise.reject(new Error(`Aborted`));
+  }
+  return new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => resolve(title), ms);
+    if (signal) {
+      const onAbort = () => {
+        clearTimeout(timeout);
+        reject(new Error(`Aborted`));
+        signal.removeEventListener('abort', onAbort);
+      };
+      signal.addEventListener('abort', onAbort);
+    }
+  });
+};
+
 const createAsyncTask = (title: string, ms: number): Task<string> => {
-  const task: Task<string> = () => delay(title, ms);
+  const task: Task<string> = ({ signal }) => delay(title, ms, signal);
   task.title = title;
   return task;
 };
@@ -51,7 +67,7 @@ describe('TaskQueue', () => {
     const t1 = jest.fn();
 
     queue.push(t1, t1, t1);
-    await expect(queue.run(-1)).rejects.toEqual(new Error('Invalid concurrency'));
+    await expect(queue.run({ concurrency: -1 })).rejects.toEqual(new Error('Invalid concurrency'));
   });
 
   it('should convert to Task', async () => {
@@ -94,7 +110,7 @@ describe('TaskQueue', () => {
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
 
     queue.push(t1, t2, t3);
-    const res = await queue.run(2);
+    const res = await queue.run({ concurrency: 2 });
 
     expect(res).toEqual(['t1', 't3', 't2']);
     expect(events).toEqual(['start-t1', 'start-t2', 'complete-t1', 'start-t3', 'complete-t3', 'complete-t2']);
@@ -111,7 +127,7 @@ describe('TaskQueue', () => {
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
 
     queue.push(t1, t2, t3);
-    const res = await queue.run(2);
+    const res = await queue.run({ concurrency: 2 });
 
     expect(res).toEqual(['t2', 't1', 't3']);
     expect(events).toEqual(['start-t1', 'start-t2', 'complete-t2', 'start-t3', 'complete-t1', 'complete-t3']);
@@ -157,10 +173,42 @@ describe('TaskQueue', () => {
 
     queue.push(t1, t2, t3);
     try {
-      await queue.run(2);
+      await queue.run({ concurrency: 2 });
     } catch (err) {
       void 0;
     }
+  });
+
+  it('should cancel the queue', async () => {
+    const queue = new TaskQueue();
+
+    const t1 = createAsyncTask('t1', 10);
+    const t2 = createAsyncTask('t2', 50);
+    const t3 = createAsyncTask('t3', 20);
+
+    const events: string[] = [];
+    queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
+    queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+
+    queue.push(t1, t2, t3);
+
+    let messages: string[] = [];
+    let error = null;
+
+    try {
+      await queue.run({ timeout: 20, concurrency: 2 });
+    } catch (err) {
+      messages = err.message.split('\n');
+      error = err;
+    }
+
+    expect(events).toEqual(['start-t1', 'start-t2', 'complete-t1', 'start-t3']);
+    expect(messages[0]?.trim()).toEqual('TaskQueue ended with 3 errors:');
+    expect(error).toBeInstanceOf(QueueError);
+    expect(error.errors).toHaveLength(3);
+    expect(error.errors[0].message).toMatch('Queue Timeout');
+    expect(error.errors[1].message).toMatch('t2: Aborted');
+    expect(error.errors[2].message).toMatch('t3: Aborted');
   });
 
   it('should subscribe to events and print to console', async () => {

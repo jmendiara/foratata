@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import AbortController from 'node-abort-controller';
 
 /**
  * Simple Task Queue to make notificable concurrent tasks, with continue-on-failure
@@ -14,8 +15,9 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
   private results: RESULT[] = [];
   private running = 0;
   private runStart = 0;
+  private controller: AbortController;
 
-  constructor(public title = 'TaskQueue', public concurrency?: number) {
+  constructor(public title = 'TaskQueue', public options: QueueOptions = {}) {
     super();
   }
 
@@ -35,9 +37,10 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
   private async runTask(task: Task<RESULT>) {
     this.running++;
     const start = Date.now();
+    const signal = this.controller.signal;
     try {
       this.emit('taskStart', { task });
-      const result = await task();
+      const result = await task({ signal });
       this.emit('taskSuccess', { task, time: Date.now() - start, result });
       this.results.push(result);
     } catch (error) {
@@ -49,13 +52,17 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
     this.emit('taskCompleted', { task, time: Date.now() - start });
     this.running--;
 
-    const arePendingTasks = this.pending.length > 0;
-    if (arePendingTasks) {
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore
-      this.runTask(this.pending.shift());
-    } else if (this.running === 0) {
-      this.complete();
+    // aborting does efectivelly complete the queue
+    if (!signal.aborted) {
+      const arePendingTasks = this.pending.length > 0;
+      const isExecutionCompleted = this.running === 0;
+      if (arePendingTasks) {
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // @ts-ignore
+        this.runTask(this.pending.shift());
+      } else if (isExecutionCompleted) {
+        this.complete();
+      }
     }
   }
 
@@ -82,10 +89,9 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
    * outerQueue.run();
    *
    * ```
-   * @param concurrency
    */
-  public toTask(concurrency?: number): Task<RESULT[]> {
-    const task: Task<RESULT[]> = () => this.run(concurrency);
+  public toTask(options: QueueOptions = {}): Task<RESULT[]> {
+    const task: Task<RESULT[]> = () => this.run(options);
     task.title = this.title;
     return task;
   }
@@ -97,33 +103,47 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
    *
    * Rejects with a simple error with a message with an error abstract. For more detailed errors, you can subscribe
    * to `complete` event.
-   *
-   * @param concurrency the concurrency to execute task. Not providing this parameter will run all the tasks in parallel
    */
-  public async run(concurrency?: number): Promise<RESULT[]> {
-    concurrency = concurrency ?? this.concurrency ?? this.queue.length;
+  public async run(options: QueueOptions = {}): Promise<RESULT[]> {
+    const concurrency = options.concurrency ?? this.options.concurrency ?? this.queue.length;
+    const timeoutMs = options.timeout ?? this.options.timeout;
     if ((concurrency as number) <= 0 && this.queue.length !== 0) {
       throw new Error('Invalid concurrency');
     }
 
     this.runStart = Date.now();
+    this.controller = new AbortController();
 
     return new Promise((resolve, reject) => {
+      let timeout: NodeJS.Timeout;
+
       this.once('complete', ({ errors }) => {
-        if (errors) {
-          const msgs = [
-            `${this.title} ended with ${errors.length} errors:`,
-            ...errors.map((err: Error) => err.message),
-          ];
-          reject(new QueueError(msgs.join('\n  '), errors));
-        } else {
-          resolve(this.results);
-        }
+        clearTimeout(timeout);
+        // Schedule resolving after I/O to allow Aborted Tasks to process the cancellation
+        setImmediate(() => {
+          if (errors) {
+            const msgs = [
+              `${this.title} ended with ${errors.length} errors:`,
+              ...errors.map((err: Error) => err.message),
+            ];
+            reject(new QueueError(msgs.join('\n  '), errors));
+          } else {
+            resolve(this.results);
+          }
+        });
       });
 
       this.emit('start', { concurrency, size: this.queue.length });
       if (this.queue.length === 0) {
         this.complete();
+      }
+
+      if (timeoutMs) {
+        timeout = setTimeout(() => {
+          this.controller.abort();
+          this.errors.unshift(new Error('Queue Timeout'));
+          this.complete();
+        }, timeoutMs);
       }
       // Copy queue to allow rehuse
       this.pending = this.queue;
@@ -185,11 +205,21 @@ export interface TaskQueue {
 }
 
 /**
+ * Options for running a queue
+ */
+export interface QueueOptions {
+  /** the concurrency to execute tasks. Not providing this parameter will run all the tasks in parallel */
+  concurrency?: number;
+  /** max time in ms allowed to run the queue. If it's not done in the provided time, will cancel the pending tasks and fail the queue execution */
+  timeout?: number;
+}
+
+/**
  * Asyncronous execution task
  */
 export interface Task<RESULT = unknown> {
   /** async function executing a task */
-  (): Promise<RESULT> | RESULT;
+  (opts?: { signal: AbortSignal }): Promise<RESULT> | RESULT;
   /** optional title for the task. Good to set for better trazability */
   title?: string;
 }
