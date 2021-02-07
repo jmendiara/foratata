@@ -46,7 +46,7 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
     } catch (error) {
       // store and forget
       this.emit('taskError', { error, task, time: Date.now() - start });
-      const err = new Error(`${task.title ?? task.name}: ${error?.message ?? error}`);
+      const err = new TaskError(`${task.title ?? task.name}: ${error?.message ?? error}`, error);
       this.errors.push(err);
     }
     this.emit('taskCompleted', { task, time: Date.now() - start });
@@ -292,7 +292,14 @@ export interface QueueStartEvent {
  * Run Queue with all the errors and the abstract message for all of them
  */
 export class QueueError extends Error {
-  constructor(message: string, public errors: Error[]) {
+  constructor(message: string, public errors: TaskError[]) {
+    super(message);
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+export class TaskError extends Error {
+  constructor(message: string, public cause: unknown) {
     super(message);
     Object.setPrototypeOf(this, new.target.prototype);
   }

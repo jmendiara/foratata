@@ -1,4 +1,4 @@
-import { Task, TaskQueue, ConsoleSubscriber, QueueError } from '../src';
+import { Task, TaskQueue, ConsoleSubscriber, QueueError, TaskError } from '../src';
 
 const delay = (title: string, ms: number, signal?: AbortSignal) => {
   if (signal?.aborted) {
@@ -154,7 +154,10 @@ describe('TaskQueue', () => {
     expect(messages[1]?.trim()).toContain('bum');
     expect(error).toBeInstanceOf(QueueError);
     expect(error.errors).toHaveLength(1);
+    expect(error.errors[0]).toBeInstanceOf(TaskError);
     expect(error.errors[0].message).toMatch('bum');
+    expect(error.errors[0].cause).toBeInstanceOf(Error);
+    expect(error.errors[0].cause.message).toMatch('bum');
   });
 
   it('should receive results/erros on complete', async () => {
