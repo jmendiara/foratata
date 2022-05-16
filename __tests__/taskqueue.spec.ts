@@ -1,6 +1,13 @@
 import { Task, TaskQueue, ConsoleSubscriber, QueueError, TaskError } from '../src';
 
-const delay = (title: string, ms: number, signal?: AbortSignal) => {
+export interface GenericAbortSignal {
+  aborted: boolean;
+  onabort: ((...args: any) => any) | null;
+  addEventListener: (...args: any) => any;
+  removeEventListener: (...args: any) => any;
+}
+
+const delay = (title: string, ms: number, signal?: GenericAbortSignal) => {
   if (signal?.aborted) {
     return Promise.reject(new Error(`Aborted`));
   }
