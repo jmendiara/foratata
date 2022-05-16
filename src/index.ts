@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import AbortController from 'node-abort-controller';
+import { AbortController, AbortSignal } from 'node-abort-controller';
 
 /**
  * Simple Task Queue to make notificable concurrent tasks, with continue-on-failure
