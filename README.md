@@ -1,7 +1,7 @@
 
 # foratata
 
-Concurrent TaskQueue with lifecycle notification in typescript (alike a Promise.map with concurrency and continue on failure)
+Concurrent repeatable TaskQueue with lifecycle notification in typescript (alike a Promise.map with concurrency and continue on failure)
 and cancellation support
 
 NodeJS only (if somebody interested on browser, please open issue)
@@ -63,6 +63,8 @@ const otherQueue = new TaskQueue();
 queue.push(otherQueue.toTask());
 
 await queue.run(); // uses the constructor concurrency. Or all in parallel if none was specified
+
+await queue.every(30); // repeats the task every 30ms. uses the constructor concurrency. Or all in parallel if none was specified
 ```
 
 ### Notifications
