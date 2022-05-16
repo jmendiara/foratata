@@ -1,13 +1,7 @@
 import { Task, TaskQueue, ConsoleSubscriber, QueueError, TaskError } from '../src';
+import { AbortController, AbortSignal } from 'node-abort-controller';
 
-interface GenericAbortSignal {
-  aborted: boolean;
-  onabort: ((...args: any[]) => any) | null;
-  addEventListener: (...args: any[]) => any;
-  removeEventListener: (...args: any[]) => any;
-}
-
-const delay = (title: string, ms: number, signal?: GenericAbortSignal) => {
+const delay = (title: string, ms: number, signal?: AbortSignal) => {
   if (signal?.aborted) {
     return Promise.reject(new Error(`Aborted`));
   }
@@ -189,7 +183,7 @@ describe('TaskQueue', () => {
     }
   });
 
-  it('should cancel the queue', async () => {
+  it('should cancel the queue on timeout', async () => {
     const queue = new TaskQueue();
 
     const t1 = createAsyncTask('t1', 10);
@@ -198,7 +192,8 @@ describe('TaskQueue', () => {
 
     const events: string[] = [];
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
-    queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+    queue.on('taskError', ({ task }) => events.push(`error-${task.title}`));
+    queue.on('taskSuccess', ({ task }) => events.push(`success-${task.title}`));
 
     queue.push(t1, t2, t3);
 
@@ -212,13 +207,97 @@ describe('TaskQueue', () => {
       error = err;
     }
 
-    expect(events).toEqual(['start-t1', 'start-t2', 'complete-t1', 'start-t3']);
+    expect(events).toEqual(['start-t1', 'start-t2', 'success-t1', 'start-t3', 'error-t2', 'error-t3']);
     expect(messages[0]?.trim()).toEqual('TaskQueue ended with 3 errors:');
     expect(error).toBeInstanceOf(QueueError);
     expect(error.errors).toHaveLength(3);
     expect(error.errors[0].message).toMatch('Queue Timeout');
     expect(error.errors[1].message).toMatch('t2: Aborted');
     expect(error.errors[2].message).toMatch('t3: Aborted');
+  });
+
+  it('should cancel the queue on signal', async () => {
+    const queue = new TaskQueue();
+
+    const t1 = createAsyncTask('t1', 10);
+    const t2 = createAsyncTask('t2', 50);
+    const t3 = createAsyncTask('t3', 20);
+
+    const events: string[] = [];
+    queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
+    queue.on('taskError', ({ task }) => events.push(`error-${task.title}`));
+    queue.on('taskSuccess', ({ task }) => events.push(`success-${task.title}`));
+
+    queue.push(t1, t2, t3);
+
+    let messages: string[] = [];
+    let error = null;
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    try {
+      setTimeout(() => controller.abort(), 20);
+      await queue.run({ concurrency: 2, signal });
+    } catch (err) {
+      messages = err.message.split('\n');
+      error = err;
+    }
+
+    expect(events).toEqual(['start-t1', 'start-t2', 'success-t1', 'start-t3', 'error-t2', 'error-t3']);
+    expect(messages[0]?.trim()).toEqual('TaskQueue ended with 3 errors:');
+    expect(error).toBeInstanceOf(QueueError);
+    expect(error.errors).toHaveLength(3);
+    expect(error.errors[0].message).toMatch('Queue Aborted');
+    expect(error.errors[1].message).toMatch('t2: Aborted');
+    expect(error.errors[2].message).toMatch('t3: Aborted');
+  });
+
+  it('should repeat the queue until signal', async () => {
+    const queue = new TaskQueue();
+
+    const t1 = createAsyncTask('t1', 50);
+    const t2 = createAsyncTask('t2', 50);
+    const t3 = createAsyncTask('t3', 50);
+
+    const events: string[] = [];
+    queue.on('start', () => events.push(`start`));
+    queue.on('complete', () => events.push(`complete`));
+    queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
+    queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+
+    queue.push(t1, t2, t3);
+
+    const controller = new AbortController();
+    const signal = controller.signal;
+
+    try {
+      setTimeout(() => controller.abort(), 75);
+      await queue.every(10, { signal });
+      // eslint-disable-next-line no-empty
+    } catch (err) {}
+
+    expect(events).toEqual([
+      // first iteration in the firts 50 ms
+      'start',
+      'start-t1',
+      'start-t2',
+      'start-t3',
+      'complete-t1',
+      'complete-t2',
+      'complete-t3',
+      'complete',
+
+      // second iteration. Cancelled by timeout
+      'start',
+      'start-t1',
+      'start-t2',
+      'start-t3',
+      'complete-t1',
+      'complete-t2',
+      'complete-t3',
+      'complete',
+    ]);
   });
 
   it('should subscribe to events and print to console', async () => {

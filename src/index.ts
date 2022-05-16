@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { AbortController, AbortSignal } from 'node-abort-controller';
+import delay from 'delay';
 
 /**
  * Simple Task Queue to make notificable concurrent tasks, with continue-on-failure
@@ -30,7 +31,6 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
 
     this.runStart = 0;
     this.emit('complete', event);
-    this.removeAllListeners();
   }
 
   /** consumes the queue runnin tasks */
@@ -49,8 +49,8 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
       const err = new TaskError(`${task.title ?? task.name}: ${error?.message ?? error}`, error);
       this.errors.push(err);
     }
-    this.emit('taskCompleted', { task, time: Date.now() - start });
     this.running--;
+    this.emit('taskCompleted', { task, time: Date.now() - start });
 
     // aborting does efectivelly complete the queue
     if (!signal.aborted) {
@@ -97,6 +97,23 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
   }
 
   /**
+   * Runs the queue every specified ms
+   *
+   * @param every time in ms to wait once the queue completes to rerun it
+   * @param options
+   */
+  public async every(every: number, options: QueueOptions = {}): Promise<void> {
+    try {
+      await this.run(options);
+      // eslint-disable-next-line no-empty
+    } catch (err) {}
+
+    if (!options.signal?.aborted) {
+      await delay(every, { signal: options.signal });
+      return this.every(every, options);
+    }
+  }
+  /**
    * Runs the queue.
    *
    * A failing task does not end the execution, but is stored to late notification.
@@ -107,6 +124,7 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
   public async run(options: QueueOptions = {}): Promise<RESULT[]> {
     const concurrency = options.concurrency ?? this.options.concurrency ?? this.queue.length;
     const timeoutMs = options.timeout ?? this.options.timeout;
+    const signal = options.signal ?? this.options.signal;
     if ((concurrency as number) <= 0 && this.queue.length !== 0) {
       throw new Error('Invalid concurrency');
     }
@@ -117,7 +135,17 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
     return new Promise((resolve, reject) => {
       let timeout: NodeJS.Timeout;
 
+      const onAbort = () => {
+        this.controller.abort();
+        this.errors.unshift(new Error('Queue Aborted'));
+        setImmediate(() => this.complete());
+      };
+
+      signal?.addEventListener('abort', onAbort);
+
       this.once('complete', ({ errors }) => {
+        signal?.removeEventListener('abort', onAbort);
+
         clearTimeout(timeout);
         // Schedule resolving after I/O to allow Aborted Tasks to process the cancellation
         setImmediate(() => {
@@ -146,7 +174,7 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
         }, timeoutMs);
       }
       // Copy queue to allow rehuse
-      this.pending = this.queue;
+      this.pending = [...this.queue];
       this.pending.splice(0, concurrency).forEach((task) => this.runTask(task));
     });
   }
@@ -212,6 +240,8 @@ export interface QueueOptions {
   concurrency?: number;
   /** max time in ms allowed to run the queue. If it's not done in the provided time, will cancel the pending tasks and fail the queue execution */
   timeout?: number;
+  /** AbortSignal signaling the Queue execution is cancelled. See https://developer.mozilla.org/en-US/docs/Web/API/AbortSignal */
+  signal?: AbortSignal;
 }
 
 /**
