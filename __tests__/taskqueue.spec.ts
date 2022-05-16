@@ -1,10 +1,10 @@
 import { Task, TaskQueue, ConsoleSubscriber, QueueError, TaskError } from '../src';
 
-export interface GenericAbortSignal {
+interface GenericAbortSignal {
   aborted: boolean;
-  onabort: ((...args: any) => any) | null;
-  addEventListener: (...args: any) => any;
-  removeEventListener: (...args: any) => any;
+  onabort: ((...args: unknown[]) => unknown) | null;
+  addEventListener: (...args: unknown[]) => unknown;
+  removeEventListener: (...args: unknown[]) => unknown;
 }
 
 const delay = (title: string, ms: number, signal?: GenericAbortSignal) => {
