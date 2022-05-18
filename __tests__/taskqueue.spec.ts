@@ -90,14 +90,25 @@ describe('TaskQueue', () => {
     const t3 = createAsyncTask('t3', 20);
 
     const events: string[] = [];
+    queue.on('start', () => events.push(`start`));
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+    queue.on('complete', () => events.push(`complete`));
 
     queue.push(t1, t2, t3);
     const res = await queue.run();
 
     expect(res).toEqual(['t1', 't3', 't2']);
-    expect(events).toEqual(['start-t1', 'start-t2', 'start-t3', 'complete-t1', 'complete-t3', 'complete-t2']);
+    expect(events).toEqual([
+      'start',
+      'start-t1',
+      'start-t2',
+      'start-t3',
+      'complete-t1',
+      'complete-t3',
+      'complete-t2',
+      'complete',
+    ]);
   });
 
   it('should run all async tasks with concurrency', async () => {
@@ -107,14 +118,25 @@ describe('TaskQueue', () => {
     const t3 = createAsyncTask('t3', 20);
 
     const events: string[] = [];
+    queue.on('start', () => events.push(`start`));
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+    queue.on('complete', () => events.push(`complete`));
 
     queue.push(t1, t2, t3);
     const res = await queue.run({ concurrency: 2 });
 
     expect(res).toEqual(['t1', 't3', 't2']);
-    expect(events).toEqual(['start-t1', 'start-t2', 'complete-t1', 'start-t3', 'complete-t3', 'complete-t2']);
+    expect(events).toEqual([
+      'start',
+      'start-t1',
+      'start-t2',
+      'complete-t1',
+      'start-t3',
+      'complete-t3',
+      'complete-t2',
+      'complete',
+    ]);
   });
 
   it('should be able to combine sync/async tasks', async () => {
@@ -124,14 +146,25 @@ describe('TaskQueue', () => {
     const t3 = createAsyncTask('t3', 10);
 
     const events: string[] = [];
+    queue.on('start', () => events.push(`start`));
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
     queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+    queue.on('complete', () => events.push(`complete`));
 
     queue.push(t1, t2, t3);
     const res = await queue.run({ concurrency: 2 });
 
     expect(res).toEqual(['t2', 't1', 't3']);
-    expect(events).toEqual(['start-t1', 'start-t2', 'complete-t2', 'start-t3', 'complete-t1', 'complete-t3']);
+    expect(events).toEqual([
+      'start',
+      'start-t1',
+      'start-t2',
+      'complete-t2',
+      'start-t3',
+      'complete-t1',
+      'complete-t3',
+      'complete',
+    ]);
   });
 
   it('should manage errors silently', async () => {
@@ -191,9 +224,11 @@ describe('TaskQueue', () => {
     const t3 = createAsyncTask('t3', 20);
 
     const events: string[] = [];
+    queue.on('start', () => events.push(`start`));
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
     queue.on('taskError', ({ task }) => events.push(`error-${task.title}`));
     queue.on('taskSuccess', ({ task }) => events.push(`success-${task.title}`));
+    queue.on('complete', () => events.push(`complete`));
 
     queue.push(t1, t2, t3);
 
@@ -207,7 +242,16 @@ describe('TaskQueue', () => {
       error = err;
     }
 
-    expect(events).toEqual(['start-t1', 'start-t2', 'success-t1', 'start-t3', 'error-t2', 'error-t3']);
+    expect(events).toEqual([
+      'start',
+      'start-t1',
+      'start-t2',
+      'success-t1',
+      'start-t3',
+      'error-t2',
+      'error-t3',
+      'complete',
+    ]);
     expect(messages[0]?.trim()).toEqual('TaskQueue ended with 3 errors:');
     expect(error).toBeInstanceOf(QueueError);
     expect(error.errors).toHaveLength(3);
@@ -224,9 +268,11 @@ describe('TaskQueue', () => {
     const t3 = createAsyncTask('t3', 20);
 
     const events: string[] = [];
+    queue.on('start', () => events.push(`start`));
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
     queue.on('taskError', ({ task }) => events.push(`error-${task.title}`));
     queue.on('taskSuccess', ({ task }) => events.push(`success-${task.title}`));
+    queue.on('complete', () => events.push(`complete`));
 
     queue.push(t1, t2, t3);
 
@@ -244,7 +290,16 @@ describe('TaskQueue', () => {
       error = err;
     }
 
-    expect(events).toEqual(['start-t1', 'start-t2', 'success-t1', 'start-t3', 'error-t2', 'error-t3']);
+    expect(events).toEqual([
+      'start',
+      'start-t1',
+      'start-t2',
+      'success-t1',
+      'start-t3',
+      'error-t2',
+      'error-t3',
+      'complete',
+    ]);
     expect(messages[0]?.trim()).toEqual('TaskQueue ended with 3 errors:');
     expect(error).toBeInstanceOf(QueueError);
     expect(error.errors).toHaveLength(3);
@@ -262,40 +317,38 @@ describe('TaskQueue', () => {
 
     const events: string[] = [];
     queue.on('start', () => events.push(`start`));
-    queue.on('complete', () => events.push(`complete`));
     queue.on('taskStart', ({ task }) => events.push(`start-${task.title}`));
-    queue.on('taskCompleted', ({ task }) => events.push(`complete-${task.title}`));
+    queue.on('taskError', ({ task }) => events.push(`error-${task.title}`));
+    queue.on('taskSuccess', ({ task }) => events.push(`success-${task.title}`));
+    queue.on('complete', () => events.push(`complete`));
 
     queue.push(t1, t2, t3);
 
     const controller = new AbortController();
     const signal = controller.signal;
 
-    try {
-      setTimeout(() => controller.abort(), 75);
-      await queue.every(10, { signal });
-      // eslint-disable-next-line no-empty
-    } catch (err) {}
+    setTimeout(() => controller.abort(), 75);
+    await queue.every(10, { signal });
 
     expect(events).toEqual([
-      // first iteration in the firts 50 ms
+      // first iteration in the firsts 50 ms
       'start',
       'start-t1',
       'start-t2',
       'start-t3',
-      'complete-t1',
-      'complete-t2',
-      'complete-t3',
+      'success-t1',
+      'success-t2',
+      'success-t3',
       'complete',
 
-      // second iteration. Cancelled by timeout
+      // second iteration. Cancelled by signal
       'start',
       'start-t1',
       'start-t2',
       'start-t3',
-      'complete-t1',
-      'complete-t2',
-      'complete-t3',
+      'error-t1',
+      'error-t2',
+      'error-t3',
       'complete',
     ]);
   });
