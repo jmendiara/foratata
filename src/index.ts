@@ -17,6 +17,7 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
   private running = 0;
   private runStart = 0;
   private controller: AbortController;
+  private removeListeners = true;
 
   constructor(public title = 'TaskQueue', public options: QueueOptions = {}) {
     super();
@@ -31,6 +32,15 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
 
     this.runStart = 0;
     this.emit('complete', event);
+    if (this.removeListeners) {
+      this.removeAllListeners();
+    }
+  }
+
+  private abort(error: Error) {
+    this.controller.abort();
+    this.errors.unshift(error);
+    setImmediate(() => this.complete());
   }
 
   /** consumes the queue runnin tasks */
@@ -103,15 +113,25 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
    * @param options
    */
   public async every(every: number, options: QueueOptions = {}): Promise<void> {
-    try {
-      await this.run(options);
-      // eslint-disable-next-line no-empty
-    } catch (err) {}
+    this.removeListeners = false;
 
-    if (!options.signal?.aborted) {
-      await delay(every, { signal: options.signal });
-      return this.every(every, options);
-    }
+    // remove all listeners when the `once('complete')` in run has ended and cancelled all the tasks
+    // this way we can notify 'complete' events to userland
+    options.signal?.addEventListener('abort', () => setTimeout(() => this.removeAllListeners(), 0), { once: true });
+
+    const run = async (): Promise<void> => {
+      try {
+        await this.run(options);
+        await delay(every, { signal: options.signal });
+        // eslint-disable-next-line no-empty
+      } catch (err) {}
+
+      if (!options.signal?.aborted) {
+        await run();
+      }
+    };
+
+    return run();
   }
   /**
    * Runs the queue.
@@ -135,13 +155,9 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
     return new Promise((resolve, reject) => {
       let timeout: NodeJS.Timeout;
 
-      const onAbort = () => {
-        this.controller.abort();
-        this.errors.unshift(new Error('Queue Aborted'));
-        setImmediate(() => this.complete());
-      };
+      const onAbort = () => this.abort(new Error('Queue Aborted'));
 
-      signal?.addEventListener('abort', onAbort);
+      signal?.addEventListener('abort', onAbort, { once: true });
 
       this.once('complete', ({ errors }) => {
         signal?.removeEventListener('abort', onAbort);
@@ -167,11 +183,7 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
       }
 
       if (timeoutMs) {
-        timeout = setTimeout(() => {
-          this.controller.abort();
-          this.errors.unshift(new Error('Queue Timeout'));
-          this.complete();
-        }, timeoutMs);
+        timeout = setTimeout(() => this.abort(new Error('Queue Timeout')), timeoutMs);
       }
       // Copy queue to allow rehuse
       this.pending = [...this.queue];
