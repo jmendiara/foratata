@@ -23,7 +23,7 @@ export class TaskQueue<RESULT = unknown> extends EventEmitter {
   }
 
   private complete() {
-    const event: QueueCompleteEvent = {
+    const event: QueueCompleteEvent<RESULT> = {
       time: Date.now() - this.runStart,
       results: this.results,
       errors: this.errors.length !== 0 ? this.errors : undefined,
@@ -223,13 +223,13 @@ export const ConsoleSubscriber = (queue: TaskQueue, verbose = false): (() => voi
   return unsubscribe;
 };
 
-export interface TaskQueue {
-  on(event: 'taskStart', listener: (ev: TaskStartEvent) => void): this;
-  on(event: 'taskSuccess', listener: (ev: TaskSuccessEvent) => void): this;
+export interface TaskQueue<RESULT = unknown> {
+  on(event: 'taskStart', listener: (ev: TaskStartEvent<RESULT>) => void): this;
+  on(event: 'taskSuccess', listener: (ev: TaskSuccessEvent<RESULT>) => void): this;
   on(event: 'taskError', listener: (ev: TaskErrorEvent) => void): this;
-  on(event: 'taskCompleted', listener: (ev: TaskEvent) => void): this;
+  on(event: 'taskCompleted', listener: (ev: TaskEvent<RESULT>) => void): this;
   on(event: 'start', listener: (ev: QueueStartEvent) => void): this;
-  on(event: 'complete', listener: (ev: QueueCompleteEvent) => void): this;
+  on(event: 'complete', listener: (ev: QueueCompleteEvent<RESULT>) => void): this;
 }
 
 /**
@@ -283,7 +283,7 @@ export interface TaskStartEvent<RESULT = unknown> {
 /**
  * Emmited when a task succeeds
  */
-export interface TaskSuccessEvent<RESULT = unknown> extends TaskEvent {
+export interface TaskSuccessEvent<RESULT = unknown> extends TaskEvent<RESULT> {
   /** the error thrown */
   result: RESULT;
 }
